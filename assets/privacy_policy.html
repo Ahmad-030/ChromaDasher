@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Privacy Policy – ChromaDasher</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500&display=swap" rel="stylesheet" />
+    <style>
+        :root {
+          --bg:      #07080f;
+          --bg2:     #0d0f1c;
+          --cyan:    #00e5ff;
+          --violet:  #b04aff;
+          --amber:   #ffb300;
+          --white72: rgba(255,255,255,0.72);
+          --white25: rgba(255,255,255,0.25);
+          --white04: rgba(255,255,255,0.04);
+          --border-cyan: rgba(0,229,255,0.2);
+          --border-violet: rgba(176,74,255,0.2);
+          --border-amber: rgba(255,179,0,0.2);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+          background: var(--bg);
+          color: var(--white72);
+          font-family: 'Exo 2', sans-serif;
+          font-weight: 400;
+          font-size: 14px;
+          line-height: 1.65;
+          min-height: 100vh;
+          overflow-x: hidden;
+        }
+
+        /* ── Animated grid background ── */
+        body::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+          background-size: 40px 40px;
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        /* ── Ambient glows ── */
+        body::after {
+          content: '';
+          position: fixed;
+          top: -120px;
+          right: -80px;
+          width: 420px;
+          height: 420px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(176,74,255,0.12) 0%, transparent 70%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .glow-bottom {
+          position: fixed;
+          bottom: -100px;
+          left: -60px;
+          width: 360px;
+          height: 360px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(0,229,255,0.09) 0%, transparent 70%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        /* ── Layout ── */
+        .wrapper {
+          position: relative;
+          z-index: 1;
+          max-width: 680px;
+          margin: 0 auto;
+          padding: 0 20px 60px;
+        }
+
+        /* ── Header ── */
+        header {
+          padding: 24px 0 20px;
+          border-bottom: 1px solid var(--border-cyan);
+          margin-bottom: 28px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .shield-icon {
+          flex-shrink: 0;
+          width: 42px;
+          height: 42px;
+          border-radius: 12px;
+          border: 1px solid var(--border-cyan);
+          background: rgba(0,229,255,0.06);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 0 16px rgba(0,229,255,0.15), inset 0 0 12px rgba(0,229,255,0.05);
+        }
+
+        .shield-icon svg {
+          width: 22px;
+          height: 22px;
+          fill: var(--cyan);
+          filter: drop-shadow(0 0 6px var(--cyan));
+        }
+
+        .header-text h1 {
+          font-family: 'Orbitron', monospace;
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: 3px;
+          color: var(--cyan);
+          text-shadow: 0 0 14px rgba(0,229,255,0.6);
+          line-height: 1.2;
+        }
+
+        .header-text p {
+          font-size: 11px;
+          color: var(--white25);
+          letter-spacing: 1px;
+          margin-top: 2px;
+          font-family: 'Orbitron', monospace;
+        }
+
+        /* ── Section card ── */
+        .section {
+          margin-bottom: 20px;
+          opacity: 0;
+          transform: translateY(16px);
+          animation: fadeUp 0.4s ease forwards;
+        }
+
+        @keyframes fadeUp {
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* staggered delays */
+        .section:nth-child(1)  { animation-delay: 0.05s; }
+        .section:nth-child(2)  { animation-delay: 0.10s; }
+        .section:nth-child(3)  { animation-delay: 0.15s; }
+        .section:nth-child(4)  { animation-delay: 0.20s; }
+        .section:nth-child(5)  { animation-delay: 0.25s; }
+        .section:nth-child(6)  { animation-delay: 0.30s; }
+        .section:nth-child(7)  { animation-delay: 0.35s; }
+        .section:nth-child(8)  { animation-delay: 0.40s; }
+        .section:nth-child(9)  { animation-delay: 0.45s; }
+
+        .section-title {
+          font-family: 'Orbitron', monospace;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 1.5px;
+          margin-bottom: 8px;
+        }
+
+        .section-title.cyan   { color: var(--cyan);   text-shadow: 0 0 10px rgba(0,229,255,0.5); }
+        .section-title.amber  { color: var(--amber);  text-shadow: 0 0 10px rgba(255,179,0,0.5); }
+        .section-title.violet { color: var(--violet); text-shadow: 0 0 10px rgba(176,74,255,0.5); }
+
+        .section-body {
+          width: 100%;
+          padding: 14px 18px;
+          background: var(--white04);
+          border-radius: 12px;
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--white72);
+        }
+
+        .section-body.cyan   { border: 1px solid var(--border-cyan); }
+        .section-body.amber  { border: 1px solid var(--border-amber); }
+        .section-body.violet { border: 1px solid var(--border-violet); }
+
+        /* email link */
+        .section-body a {
+          color: var(--cyan);
+          text-decoration: none;
+          text-shadow: 0 0 8px rgba(0,229,255,0.4);
+        }
+
+        /* ── Divider ── */
+        .divider {
+          height: 1px;
+          background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+          opacity: 0.3;
+          margin: 24px 0 20px;
+        }
+
+        /* ── Footer ── */
+        footer {
+          text-align: center;
+          font-size: 11px;
+          color: var(--white25);
+          font-family: 'Orbitron', monospace;
+          letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="glow-bottom"></div>
+
+<div class="wrapper">
+
+    <!-- Header -->
+    <header>
+        <div class="shield-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+            </svg>
+        </div>
+        <div class="header-text">
+            <h1>PRIVACY POLICY</h1>
+            <p>ChromaDasher</p>
+        </div>
+    </header>
+
+    <!-- Sections -->
+    <div class="section">
+        <div class="section-title amber">Last Updated</div>
+        <div class="section-body amber">December 1, 2024</div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">1. Introduction</div>
+        <div class="section-body cyan">
+            developername ("Developer", "we", "us") built ChromaDasher as a free Android game.
+            This privacy policy explains what information we collect, how we use it, and your
+            rights regarding that information.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">2. Information We Collect</div>
+        <div class="section-body cyan">
+            ChromaDasher does <strong>NOT</strong> collect any personally identifiable information.
+            All game data (scores, settings) is stored locally on your device using SharedPreferences
+            and never transmitted to external servers.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">3. Data Storage</div>
+        <div class="section-body cyan">
+            Your high scores and game preferences are saved locally on your device only. We have
+            no access to this data. Uninstalling the app will permanently remove all locally stored data.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">4. Third-Party Services</div>
+        <div class="section-body cyan">
+            ChromaDasher does not integrate with any third-party analytics, advertising, or tracking
+            services. No data is shared with, sold to, or disclosed to any third parties.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">5. Children's Privacy</div>
+        <div class="section-body cyan">
+            ChromaDasher is suitable for all ages. We do not knowingly collect personal information
+            from children or any users. Since no data is collected at all, COPPA and similar
+            regulations are fully satisfied.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">6. Permissions</div>
+        <div class="section-body cyan">
+            The app may request vibration permission to provide haptic feedback during gameplay.
+            No other device permissions (camera, microphone, location, contacts) are requested or required.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title cyan">7. Changes to This Policy</div>
+        <div class="section-body cyan">
+            We may update this Privacy Policy from time to time. Changes will be reflected with an
+            updated "Last Updated" date. Continued use of the app constitutes acceptance of the
+            revised policy.
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title violet">8. Contact Us</div>
+        <div class="section-body violet">
+            If you have any questions about this Privacy Policy, please contact us at:<br /><br />
+            <strong style="color:rgba(255,255,255,0.85);">Developer:</strong> developername<br />
+            <strong style="color:rgba(255,255,255,0.85);">Email:</strong>
+            <p>developername.dev@gmail.com</p>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <footer>© 2024 developername. All rights reserved.</footer>
+
+</div>
+</body>
+</html>

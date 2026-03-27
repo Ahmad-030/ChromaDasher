@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:chromadasher/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -131,6 +132,7 @@ class GameState {
   bool isDucking = false;
   bool isAlive = true;
   bool isStarted = false;
+  bool isPaused = false;
 
   int score = 0;
   double speed = 5.0;
@@ -143,12 +145,10 @@ class GameState {
 
   List<Obstacle> obstacles = [];
   List<Particle> particles = [];
-  List<double> groundSegments = [];
 
   double obstacleTimer = 0;
   double obstacleInterval = 2.5;
 
-  // Track which theme the player has matched
   WorldTheme playerTheme = WorldTheme.darkForest;
 
   void reset() {
@@ -158,6 +158,7 @@ class GameState {
     isDucking = false;
     isAlive = true;
     isStarted = false;
+    isPaused = false;
     score = 0;
     speed = 5.0;
     timeToNextTheme = 10.0;
@@ -168,7 +169,6 @@ class GameState {
     themeMismatched = false;
     obstacles.clear();
     particles.clear();
-    groundSegments.clear();
     obstacleTimer = 0;
     obstacleInterval = 2.5;
   }
@@ -183,13 +183,12 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen>
-    with TickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final GameState _state = GameState();
   final Random _random = Random();
 
-  late AnimationController _themeController;
   late AnimationController _tickController;
+  late AnimationController _themeTransitionCtrl;
 
   Color _skyTop = kThemes[WorldTheme.darkForest]!.skyTop;
   Color _skyBottom = kThemes[WorldTheme.darkForest]!.skyBottom;
@@ -205,8 +204,10 @@ class _GameScreenState extends State<GameScreen>
 
   static const double kGroundY = 0.72;
   static const double kCharacterX = 0.18;
-  static const double kGravity = 0.018;
-  static const double kJumpForce = -0.45;
+
+  // ── FIXED: Snappier jump — higher gravity, lower force ──
+  static const double kGravity = 0.010;
+  static const double kJumpForce = -0.20;
 
   final List<WorldTheme> _themeOrder = [
     WorldTheme.darkForest,
@@ -220,7 +221,7 @@ class _GameScreenState extends State<GameScreen>
   void initState() {
     super.initState();
 
-    _themeController = AnimationController(
+    _themeTransitionCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
@@ -235,8 +236,8 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   void dispose() {
-    _themeController.dispose();
     _tickController.dispose();
+    _themeTransitionCtrl.dispose();
     super.dispose();
   }
 
@@ -247,6 +248,7 @@ class _GameScreenState extends State<GameScreen>
     _skyBottom = kThemes[WorldTheme.darkForest]!.skyBottom;
     _groundColor = kThemes[WorldTheme.darkForest]!.groundColor;
     _themeTransitionProgress = 1.0;
+    _showThemeWarning = false;
     _state.isStarted = true;
     _tickController.repeat();
   }
@@ -256,10 +258,8 @@ class _GameScreenState extends State<GameScreen>
       _startGame();
       return;
     }
-    if (!_state.isAlive) {
-      _startGame();
-      return;
-    }
+    if (!_state.isAlive) return;
+    if (_state.isPaused) return;
     if (!_state.isJumping) {
       _state.characterVY = kJumpForce;
       _state.isJumping = true;
@@ -267,31 +267,38 @@ class _GameScreenState extends State<GameScreen>
     }
   }
 
-  void _togglePlayerTheme() {
+  void _togglePause() {
     if (!_state.isStarted || !_state.isAlive) return;
+    setState(() {
+      _state.isPaused = !_state.isPaused;
+      if (_state.isPaused) {
+        _tickController.stop();
+      } else {
+        _tickController.repeat();
+      }
+    });
+    HapticFeedback.selectionClick();
+  }
 
+  void _togglePlayerTheme() {
+    if (!_state.isStarted || !_state.isAlive || _state.isPaused) return;
     final themes = WorldTheme.values;
     final currentIdx = themes.indexOf(_state.playerTheme);
     _state.playerTheme = themes[(currentIdx + 1) % themes.length];
-
-    // Check if now matched
     _state.themeMismatched = _state.playerTheme != _state.currentTheme;
     HapticFeedback.selectionClick();
     setState(() {});
   }
 
   void _tick() {
-    if (!_state.isStarted || !_state.isAlive) return;
+    if (!_state.isStarted || !_state.isAlive || _state.isPaused) return;
 
     const double dt = 0.016;
     _state.totalTime += dt;
     _state.timeToNextTheme -= dt;
     _state.score = (_state.totalTime * 10).toInt();
-
-    // Speed ramp
     _state.speed = 5.0 + _state.totalTime * 0.08;
 
-    // Theme switch
     if (_state.timeToNextTheme <= 3.0 && !_showThemeWarning) {
       _showThemeWarning = true;
     }
@@ -300,7 +307,6 @@ class _GameScreenState extends State<GameScreen>
       _triggerThemeSwitch();
     }
 
-    // Warning pulse
     if (_showThemeWarning) {
       _warningAlpha = (sin(_state.totalTime * 8) * 0.5 + 0.5) * 0.6;
     } else {
@@ -320,7 +326,6 @@ class _GameScreenState extends State<GameScreen>
     // Gravity
     _state.characterVY += kGravity;
     _state.characterY += _state.characterVY;
-
     if (_state.characterY >= 0) {
       _state.characterY = 0;
       _state.characterVY = 0;
@@ -341,7 +346,6 @@ class _GameScreenState extends State<GameScreen>
       ));
     }
 
-    // Move obstacles & check collision
     final obstSpeed = _state.speed * 0.006;
     _state.obstacles.removeWhere((o) => o.x < -0.1);
     for (final o in _state.obstacles) {
@@ -352,12 +356,6 @@ class _GameScreenState extends State<GameScreen>
       }
     }
 
-    // Mismatch damage: slow health drain
-    if (_state.themeMismatched) {
-      // Flash effect only; actual death on next theme switch if still mismatched
-    }
-
-    // Particles
     _spawnRunParticles();
     _updateParticles(dt);
 
@@ -367,21 +365,16 @@ class _GameScreenState extends State<GameScreen>
   bool _checkCollision(Obstacle o) {
     const charSize = 0.055;
     const charH = 0.10;
-    final charX = kCharacterX;
     final charTop = kGroundY + _state.characterY - charH;
-    final charRight = charX + charSize * 0.6;
-    final charLeft = charX - charSize * 0.5;
-
+    final charRight = kCharacterX + charSize * 0.6;
+    final charLeft = kCharacterX - charSize * 0.5;
     final obstLeft = o.x;
     final obstRight = o.x + o.width;
     final obstTop = kGroundY - o.height;
 
-    if (charRight > obstLeft + 0.005 &&
+    return charRight > obstLeft + 0.005 &&
         charLeft < obstRight - 0.005 &&
-        charTop + charH > obstTop + 0.005) {
-      return true;
-    }
-    return false;
+        charTop + charH > obstTop + 0.005;
   }
 
   void _die() {
@@ -389,7 +382,6 @@ class _GameScreenState extends State<GameScreen>
     _tickController.stop();
     HapticFeedback.heavyImpact();
 
-    // Burst particles
     for (int i = 0; i < 30; i++) {
       final angle = _random.nextDouble() * pi * 2;
       final speed = 0.02 + _random.nextDouble() * 0.04;
@@ -419,11 +411,9 @@ class _GameScreenState extends State<GameScreen>
     _targetGround = td.groundColor;
     _themeTransitionProgress = 0.0;
 
-    // Check mismatch
     _state.themeMismatched = _state.playerTheme != _state.currentTheme;
 
     if (_state.themeMismatched) {
-      // Penalty: instantly die after 3s (handled via a timer)
       Future.delayed(const Duration(seconds: 3), () {
         if (_state.isAlive && _state.themeMismatched && mounted) {
           _die();
@@ -450,12 +440,11 @@ class _GameScreenState extends State<GameScreen>
   }
 
   void _updateParticles(double dt) {
-    const gravity = 0.012;
     _state.particles.removeWhere((p) => p.life <= 0);
     for (final p in _state.particles) {
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += gravity * dt;
+      p.vy += 0.012 * dt;
       p.life -= dt / p.maxLife;
     }
   }
@@ -467,12 +456,12 @@ class _GameScreenState extends State<GameScreen>
     final pd = kThemes[_state.playerTheme]!;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: CD.bg,
       body: GestureDetector(
         onTap: _jump,
         child: Stack(
           children: [
-            // Background gradient (animated)
+            // ── Animated sky background ──
             AnimatedContainer(
               duration: const Duration(milliseconds: 800),
               width: size.width,
@@ -486,7 +475,7 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
 
-            // Background details (stars/sun/snowflakes)
+            // ── Background detail ──
             CustomPaint(
               size: size,
               painter: BackgroundDetailPainter(
@@ -496,7 +485,7 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
 
-            // Ground
+            // ── Ground ──
             Positioned(
               left: 0,
               right: 0,
@@ -513,7 +502,7 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
 
-            // Ground detail lines
+            // ── Ground detail lines ──
             CustomPaint(
               size: size,
               painter: GroundDetailPainter(
@@ -524,13 +513,13 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
 
-            // Particles
+            // ── Particles ──
             CustomPaint(
               size: size,
               painter: ParticlePainter(particles: _state.particles),
             ),
 
-            // Obstacles
+            // ── Obstacles ──
             CustomPaint(
               size: size,
               painter: ObstaclePainter(
@@ -540,7 +529,7 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
 
-            // Character
+            // ── Character ──
             if (_state.isStarted)
               CustomPaint(
                 size: size,
@@ -550,187 +539,173 @@ class _GameScreenState extends State<GameScreen>
                   isDucking: _state.isDucking,
                   isJumping: _state.isJumping,
                   time: _state.totalTime,
-                  themeData: pd, // Use PLAYER theme for character
+                  themeData: pd,
                   isAlive: _state.isAlive,
                   isMismatched: _state.themeMismatched,
                 ),
               ),
 
-            // Theme warning flash
+            // ── Theme change warning flash ──
             if (_showThemeWarning && _state.isStarted && _state.isAlive)
               Positioned.fill(
                 child: IgnorePointer(
                   child: Container(
-                    color: Colors.orange.withOpacity(_warningAlpha * 0.3),
+                    color: CD.amber.withOpacity(_warningAlpha * 0.18),
                   ),
                 ),
               ),
 
-            // Mismatch warning flash
+            // ── Mismatch warning flash ──
             if (_state.themeMismatched && _state.isStarted && _state.isAlive)
               Positioned.fill(
                 child: IgnorePointer(
                   child: Container(
-                    color: Colors.red.withOpacity(
-                        (sin(_state.totalTime * 6) * 0.5 + 0.5) * 0.25),
+                    color: CD.red.withOpacity(
+                      (sin(_state.totalTime * 6) * 0.5 + 0.5) * 0.2,
+                    ),
                   ),
                 ),
               ),
 
-            // ── TOP UI ─────────────────────────────────────────────────────
+            // ── TOP HUD ──
             SafeArea(
               child: Column(
                 children: [
-                  _buildTopBar(td, size),
+                  _buildTopBar(td),
                   if (_showThemeWarning && _state.isStarted && _state.isAlive)
-                    _buildThemeWarning(td),
+                    _buildThemeWarning(),
                   if (_state.themeMismatched && _state.isStarted && _state.isAlive)
-                    _buildMismatchWarning(td),
+                    _buildMismatchWarning(),
                 ],
               ),
             ),
 
-            // ── BOTTOM THEME TOGGLE ────────────────────────────────────────
-            if (_state.isStarted && _state.isAlive)
+            // ── BOTTOM SWAP BUTTON ──
+            if (_state.isStarted && _state.isAlive && !_state.isPaused)
               Positioned(
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: SafeArea(
-                  child: _buildThemeToggle(td, pd, size),
-                ),
+                child: SafeArea(child: _buildThemeToggle(td, pd)),
               ),
 
-            // ── START SCREEN ──────────────────────────────────────────────
-            if (!_state.isStarted)
-              _buildStartScreen(td, size),
+            // ── START SCREEN ──
+            if (!_state.isStarted) _buildStartScreen(td),
 
-            // ── GAME OVER ────────────────────────────────────────────────
+            // ── PAUSE OVERLAY ──
+            if (_state.isStarted && _state.isAlive && _state.isPaused)
+              _buildPauseOverlay(td),
+
+            // ── GAME OVER OVERLAY ──
             if (_state.isStarted && !_state.isAlive)
-              _buildGameOver(td, size),
+              _buildGameOver(td),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTopBar(WorldThemeData td, Size size) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: td.uiColor.withOpacity(0.5), width: 1.5),
-        boxShadow: [
-          BoxShadow(color: td.uiColor.withOpacity(0.2), blurRadius: 12),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Score
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('SCORE',
-                  style: TextStyle(
-                    color: td.uiColor.withOpacity(0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2,
-                  )),
-              Text(
-                _state.score.toString().padLeft(6, '0'),
-                style: TextStyle(
-                  color: td.uiColor,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                  shadows: [Shadow(color: td.uiColor.withOpacity(0.5), blurRadius: 8)],
-                ),
-              ),
-            ],
-          ),
+  // ── FIXED Top HUD bar ────────────────────────────────────────────────────
 
-          const Spacer(),
-
-          // World theme indicator
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('WORLD',
-                  style: TextStyle(
-                    color: td.uiColor.withOpacity(0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2,
-                  )),
-              Row(
-                children: [
-                  Icon(td.icon, color: td.uiColor, size: 16),
-                  const SizedBox(width: 4),
-                  Text(td.name,
-                      style: TextStyle(
-                        color: td.uiColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      )),
-                ],
-              ),
-            ],
-          ),
-
-          const Spacer(),
-
-          // Timer
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('NEXT',
-                  style: TextStyle(
-                    color: td.uiColor.withOpacity(0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2,
-                  )),
-              _buildTimerBar(td),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimerBar(WorldThemeData td) {
+  Widget _buildTopBar(WorldThemeData td) {
     final progress = (_state.timeToNextTheme / 10.0).clamp(0.0, 1.0);
     final isWarning = _state.timeToNextTheme <= 3.0;
+    final barColor = isWarning ? CD.amber : CD.cyan;
 
-    return SizedBox(
-      width: 70,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Row(
         children: [
-          Text(
-            '${_state.timeToNextTheme.toInt()}s',
-            style: TextStyle(
-              color: isWarning ? Colors.orange : td.uiColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
+          // ── Score (fixed width) ──
+          Container(
+            width: 108,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: CD.neonBox(CD.cyan, r: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('SCORE',
+                    style: CD.label(8, CD.cyan.withOpacity(0.6), ls: 1.5)),
+                Text(
+                  _state.score.toString().padLeft(6, '0'),
+                  style: CD.glow(18, CD.cyan, ls: 1.5),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.white12,
-              valueColor: AlwaysStoppedAnimation(
-                isWarning ? Colors.orange : td.uiColor,
+
+          const SizedBox(width: 8),
+
+          // ── World theme badge (Expanded = fills remaining space) ──
+          Expanded(
+            child: Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration:
+              CD.neonBox(Color(td.uiColor.value), r: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(td.icon,
+                      color: Color(td.uiColor.value), size: 13),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      td.name.toUpperCase(),
+                      style: CD.label(
+                          9, Color(td.uiColor.value), ls: 0.8),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              minHeight: 6,
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // ── Timer (fixed width, compact) ──
+          Container(
+            width: 68,
+            padding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: CD.neonBox(barColor, r: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('NEXT',
+                    style: CD.label(
+                        8, barColor.withOpacity(0.6), ls: 1.5)),
+                Text(
+                  '${_state.timeToNextTheme.toInt()}s',
+                  style: CD.glow(14, barColor, ls: 1),
+                ),
+                const SizedBox(height: 3),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation(barColor),
+                    minHeight: 4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // ── Pause button ──
+          GestureDetector(
+            onTap: _togglePause,
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: CD.neonBox(CD.violet, r: 12),
+              child: const Icon(Icons.pause_rounded,
+                  color: CD.violet, size: 16),
             ),
           ),
         ],
@@ -738,196 +713,183 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _buildThemeWarning(WorldThemeData td) {
+  // ── Warning banners ──────────────────────────────────────────────────────
+
+  Widget _buildThemeWarning() {
     final nextIdx = (_themeIndex + 1) % _themeOrder.length;
-    final nextTheme = _themeOrder[nextIdx];
-    final nextTd = kThemes[nextTheme]!;
+    final nextTd = kThemes[_themeOrder[nextIdx]]!;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: CD.neonBox(CD.amber, r: 12,
+          fill: CD.amber.withOpacity(0.18)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+          const Icon(Icons.warning_amber_rounded,
+              color: CD.amber, size: 16),
           const SizedBox(width: 8),
-          Text(
-            'THEME CHANGING → ${nextTd.name.toUpperCase()}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              letterSpacing: 1,
+          Flexible(
+            child: Text(
+              'THEME → ${nextTd.name.toUpperCase()}',
+              style: CD.label(11, CD.amber, ls: 1),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 8),
-          Icon(nextTd.icon, color: Colors.white, size: 18),
+          Icon(nextTd.icon, color: CD.amber, size: 16),
         ],
       ),
     );
   }
 
-  Widget _buildMismatchWarning(WorldThemeData td) {
+  Widget _buildMismatchWarning() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Row(
+      decoration:
+      CD.neonBox(CD.red, r: 12, fill: CD.red.withOpacity(0.18)),
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.dangerous, color: Colors.white, size: 18),
-          SizedBox(width: 8),
-          Text(
-            'MISMATCH! TAP SWITCH NOW!',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 13,
-              letterSpacing: 1,
-            ),
-          ),
+          const Icon(Icons.dangerous_rounded, color: CD.red, size: 16),
+          const SizedBox(width: 8),
+          Text('MISMATCH! TAP SWAP NOW!',
+              style: CD.label(11, CD.red, ls: 1)),
         ],
       ),
     );
   }
 
-  Widget _buildThemeToggle(WorldThemeData td, WorldThemeData pd, Size size) {
+  // ── Bottom swap / theme toggle ───────────────────────────────────────────
+
+  Widget _buildThemeToggle(WorldThemeData td, WorldThemeData pd) {
     final isMatched = _state.playerTheme == _state.currentTheme;
+    final accent = isMatched ? CD.green : CD.red;
 
     return GestureDetector(
       onTap: _togglePlayerTheme,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+      child: Container(
         margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isMatched
-                ? [pd.characterColor.withOpacity(0.9), pd.characterAccent.withOpacity(0.9)]
-                : [Colors.red.withOpacity(0.85), Colors.redAccent.withOpacity(0.85)],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isMatched ? pd.uiColor : Colors.red,
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: (isMatched ? pd.uiColor : Colors.red).withOpacity(0.5),
-              blurRadius: 20,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
+        padding:
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: CD.neonBox(accent, r: 20,
+            fill: Colors.black.withOpacity(0.65)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             // Player theme
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: pd.characterAccent,
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: pd.characterAccent.withOpacity(0.5), blurRadius: 8)],
-                  ),
-                  child: Icon(pd.icon, color: Colors.white, size: 18),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('MY THEME',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.5,
-                        )),
-                    Text(pd.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        )),
-                  ],
-                ),
-              ],
-            ),
-
-            // Status indicator
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(10),
-              ),
+            Expanded(
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    isMatched ? Icons.check_circle : Icons.sync,
-                    color: Colors.white,
-                    size: 16,
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(pd.characterAccent.value)
+                          .withOpacity(0.2),
+                      border: Border.all(
+                          color: Color(pd.characterAccent.value)
+                              .withOpacity(0.7)),
+                    ),
+                    child: Icon(pd.icon,
+                        color: Color(pd.characterAccent.value),
+                        size: 16),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isMatched ? 'SYNCED' : 'SWAP!',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      letterSpacing: 1,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('MY THEME',
+                            style: CD.label(
+                                8,
+                                Colors.white.withOpacity(0.5),
+                                ls: 1)),
+                        Text(
+                          pd.name,
+                          style: CD.label(11, Colors.white, ls: 0.5),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
 
-            // World theme
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('WORLD',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.5,
-                        )),
-                    Text(td.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        )),
-                  ],
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: td.uiColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: td.uiColor.withOpacity(0.5), blurRadius: 8)],
+            const SizedBox(width: 8),
+
+            // Sync badge (fixed, never expands)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 6),
+              decoration: CD.neonBox(accent, r: 10,
+                  fill: accent.withOpacity(0.15)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isMatched
+                        ? Icons.check_circle_rounded
+                        : Icons.sync_rounded,
+                    color: accent,
+                    size: 14,
                   ),
-                  child: Icon(td.icon, color: Colors.white, size: 18),
-                ),
-              ],
+                  const SizedBox(width: 5),
+                  Text(
+                    isMatched ? 'SYNCED' : 'SWAP!',
+                    style: CD.label(11, accent, ls: 1),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // World theme
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('WORLD',
+                            style: CD.label(
+                                8,
+                                Colors.white.withOpacity(0.5),
+                                ls: 1)),
+                        Text(
+                          td.name,
+                          style: CD.label(11, Colors.white, ls: 0.5),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color:
+                      Color(td.uiColor.value).withOpacity(0.2),
+                      border: Border.all(
+                          color: Color(td.uiColor.value)
+                              .withOpacity(0.7)),
+                    ),
+                    child: Icon(td.icon,
+                        color: Color(td.uiColor.value), size: 16),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -935,165 +897,296 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _buildStartScreen(WorldThemeData td, Size size) {
+  // ── Start screen ─────────────────────────────────────────────────────────
+
+  Widget _buildStartScreen(WorldThemeData td) {
     return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.65),
+      child: NeonBg(
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo/title
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: td.uiColor, width: 2),
-                    top: BorderSide(color: td.uiColor, width: 2),
-                  ),
-                ),
-                child: Text(
-                  'THEME SWAP\nRUNNER',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: td.uiColor,
-                    fontSize: 36,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                    height: 1.1,
-                    shadows: [Shadow(color: td.uiColor.withOpacity(0.6), blurRadius: 20)],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-              // Instructions
-              _infoCard(td, Icons.swap_horiz, 'Match your theme to the world!'),
-              const SizedBox(height: 12),
-              _infoCard(td, Icons.touch_app, 'Tap screen to jump'),
-              const SizedBox(height: 12),
-              _infoCard(td, Icons.sync, 'Tap SWAP to change your theme'),
-              const SizedBox(height: 48),
-              // Start button
-              GestureDetector(
-                onTap: _startGame,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 18),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 28, vertical: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 90,
+                  height: 90,
                   decoration: BoxDecoration(
-                    color: td.uiColor,
-                    borderRadius: BorderRadius.circular(50),
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(colors: [
+                      CD.violet.withOpacity(0.6),
+                      Colors.black
+                    ]),
+                    border: Border.all(
+                        color: CD.cyan.withOpacity(0.6), width: 2),
                     boxShadow: [
-                      BoxShadow(color: td.uiColor.withOpacity(0.5), blurRadius: 24, spreadRadius: 4),
+                      BoxShadow(
+                          color: CD.cyan.withOpacity(0.3),
+                          blurRadius: 30),
                     ],
                   ),
-                  child: const Text(
-                    'TAP TO START',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 3,
-                    ),
-                  ),
+                  child: const Icon(Icons.speed_rounded,
+                      color: CD.cyan, size: 44),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 16),
+                Text('CHROMA', style: CD.glow(30, CD.cyan, ls: 8)),
+                Text('DASHER', style: CD.glow(30, CD.magenta, ls: 8)),
+                const SizedBox(height: 4),
+                Text('ENDLESS THEME RUNNER',
+                    style: CD.label(
+                        10, Colors.white.withOpacity(0.4), ls: 3)),
+
+                const SizedBox(height: 32),
+                NeonDivider(color: CD.violet),
+                const SizedBox(height: 24),
+
+                _startInfoRow(Icons.swap_horiz_rounded, CD.cyan,
+                    'Match your theme to the world!'),
+                const SizedBox(height: 12),
+                _startInfoRow(Icons.touch_app_rounded, CD.magenta,
+                    'Tap screen to jump'),
+                const SizedBox(height: 12),
+                _startInfoRow(Icons.sync_rounded, CD.violet,
+                    'Tap SWAP to change your theme'),
+                const SizedBox(height: 12),
+                _startInfoRow(Icons.timer_outlined, CD.amber,
+                    'Stay mismatched 3s = Game Over'),
+
+                const SizedBox(height: 36),
+
+                NeonButton(
+                  label: 'TAP TO START',
+                  icon: Icons.play_arrow_rounded,
+                  color: CD.cyan,
+                  fontSize: 16,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 48, vertical: 18),
+                  onTap: _startGame,
+                ),
+
+                const SizedBox(height: 20),
+
+                GestureDetector(
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/menu'),
+                  child: Text('MAIN MENU',
+                      style: CD.label(
+                          12,
+                          Colors.white.withOpacity(0.4),
+                          ls: 2)),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _infoCard(WorldThemeData td, IconData icon, String text) {
+  Widget _startInfoRow(IconData icon, Color color, String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black38,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: td.uiColor.withOpacity(0.3)),
-      ),
+      padding:
+      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration:
+      CD.neonBox(color, r: 14, fill: color.withOpacity(0.06)),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: td.uiColor, size: 20),
-          const SizedBox(width: 12),
-          Text(text,
-              style: TextStyle(
-                color: td.uiColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              )),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(text,
+                style: CD.body(
+                    13, Colors.white.withOpacity(0.75))),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildGameOver(WorldThemeData td, Size size) {
+  // ── Pause overlay ────────────────────────────────────────────────────────
+
+  Widget _buildPauseOverlay(WorldThemeData td) {
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.75),
+        color: Colors.black.withOpacity(0.78),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.dangerous, color: Colors.red, size: 64),
-              const SizedBox(height: 16),
-              const Text('GAME OVER',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                  )),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: td.uiColor.withOpacity(0.5)),
-                ),
-                child: Column(
-                  children: [
-                    Text('SCORE', style: TextStyle(color: td.uiColor.withOpacity(0.7), fontSize: 12, letterSpacing: 2)),
-                    Text(
-                      _state.score.toString().padLeft(6, '0'),
-                      style: TextStyle(
-                        color: td.uiColor,
-                        fontSize: 48,
-                        fontWeight: FontWeight.w900,
-                        shadows: [Shadow(color: td.uiColor, blurRadius: 20)],
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 32, vertical: 36),
+            decoration: CD.neonBox(CD.cyan, r: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.pause_circle_outline_rounded,
+                    color: CD.cyan, size: 52),
+                const SizedBox(height: 12),
+                Text('PAUSED', style: CD.glow(30, CD.cyan, ls: 8)),
+                const SizedBox(height: 4),
+                Text('Game is on hold',
+                    style: CD.body(
+                        13, Colors.white.withOpacity(0.4))),
+                const SizedBox(height: 24),
+                NeonDivider(color: CD.cyan),
+                const SizedBox(height: 20),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 12),
+                  decoration: CD.neonBox(CD.violet, r: 14),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('SCORE  ',
+                          style: CD.label(11,
+                              CD.violet.withOpacity(0.7), ls: 2)),
+                      Text(
+                        _state.score.toString().padLeft(6, '0'),
+                        style: CD.glow(18, CD.violet, ls: 2),
                       ),
-                    ),
-                    Text('TIME: ${_state.totalTime.toStringAsFixed(1)}s',
-                        style: TextStyle(color: td.uiColor.withOpacity(0.7), fontSize: 13)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 40),
-              GestureDetector(
-                onTap: _startGame,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 18),
-                  decoration: BoxDecoration(
-                    color: td.uiColor,
-                    borderRadius: BorderRadius.circular(50),
-                    boxShadow: [
-                      BoxShadow(color: td.uiColor.withOpacity(0.5), blurRadius: 20, spreadRadius: 2),
                     ],
                   ),
-                  child: const Text('PLAY AGAIN',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 3,
-                      )),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 24),
+
+                NeonButton(
+                  label: 'RESUME',
+                  icon: Icons.play_arrow_rounded,
+                  color: CD.cyan,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 48, vertical: 16),
+                  onTap: _togglePause,
+                ),
+                const SizedBox(height: 14),
+                NeonButton(
+                  label: 'RESTART',
+                  icon: Icons.replay_rounded,
+                  color: CD.amber,
+                  onTap: _startGame,
+                ),
+                const SizedBox(height: 14),
+                NeonButton(
+                  label: 'MAIN MENU',
+                  icon: Icons.home_rounded,
+                  color: CD.red,
+                  onTap: () => Navigator.pushNamedAndRemoveUntil(
+                      context, '/menu', (_) => false),
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  // ── Game over overlay ────────────────────────────────────────────────────
+
+  Widget _buildGameOver(WorldThemeData td) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.80),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 28, vertical: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('GAME OVER',
+                    style: CD.glow(36, CD.red, ls: 6)),
+                const SizedBox(height: 24),
+
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 28),
+                  decoration: CD.neonBox(CD.cyan, r: 20),
+                  child: Column(
+                    children: [
+                      Text('SCORE',
+                          style: CD.label(11,
+                              CD.cyan.withOpacity(0.6), ls: 4)),
+                      const SizedBox(height: 6),
+                      Text(
+                        _state.score.toString().padLeft(6, '0'),
+                        style: CD.glow(52, CD.cyan, ls: 4),
+                      ),
+                      const SizedBox(height: 18),
+                      NeonDivider(color: CD.cyan),
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment:
+                        MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _statChip(
+                              'TIME',
+                              '${_state.totalTime.toStringAsFixed(1)}s',
+                              CD.violet),
+                          _statChip(
+                              'THEME',
+                              kThemes[_state.currentTheme]!
+                                  .name
+                                  .split(' ')
+                                  .first
+                                  .toUpperCase(),
+                              CD.amber),
+                          _statChip(
+                              'SPEED',
+                              '${_state.speed.toStringAsFixed(1)}x',
+                              CD.green),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                NeonButton(
+                  label: 'PLAY AGAIN',
+                  icon: Icons.replay_rounded,
+                  color: CD.cyan,
+                  fontSize: 16,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 48, vertical: 18),
+                  onTap: _startGame,
+                ),
+                const SizedBox(height: 14),
+                NeonButton(
+                  label: 'LEADERBOARD',
+                  icon: Icons.leaderboard_rounded,
+                  color: CD.violet,
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/highscore'),
+                ),
+                const SizedBox(height: 14),
+                NeonButton(
+                  label: 'MAIN MENU',
+                  icon: Icons.home_rounded,
+                  color: Colors.white38,
+                  onTap: () => Navigator.pushNamedAndRemoveUntil(
+                      context, '/menu', (_) => false),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statChip(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label,
+            style: CD.label(9, color.withOpacity(0.6), ls: 2)),
+        const SizedBox(height: 4),
+        Text(value, style: CD.label(13, color, ls: 1)),
+      ],
     );
   }
 }
@@ -1105,7 +1198,10 @@ class BackgroundDetailPainter extends CustomPainter {
   final double time;
   final WorldThemeData themeData;
 
-  BackgroundDetailPainter({required this.theme, required this.time, required this.themeData});
+  BackgroundDetailPainter(
+      {required this.theme,
+        required this.time,
+        required this.themeData});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1113,9 +1209,7 @@ class BackgroundDetailPainter extends CustomPainter {
 
     switch (theme) {
       case WorldTheme.darkForest:
-      // Stars
         final r = Random(42);
-        paint.color = Colors.white.withOpacity(0.6);
         for (int i = 0; i < 60; i++) {
           final x = r.nextDouble() * size.width;
           final y = r.nextDouble() * size.height * 0.6;
@@ -1124,12 +1218,12 @@ class BackgroundDetailPainter extends CustomPainter {
           paint.color = Colors.white.withOpacity(0.5 * twinkle);
           canvas.drawCircle(Offset(x, y), s, paint);
         }
-        // Moon
         paint.color = Colors.white.withOpacity(0.9);
-        canvas.drawCircle(Offset(size.width * 0.85, size.height * 0.12), 24, paint);
+        canvas.drawCircle(
+            Offset(size.width * 0.85, size.height * 0.12), 24, paint);
         paint.color = themeData.skyTop;
-        canvas.drawCircle(Offset(size.width * 0.87, size.height * 0.10), 20, paint);
-        // Trees in bg
+        canvas.drawCircle(
+            Offset(size.width * 0.87, size.height * 0.10), 20, paint);
         paint.color = themeData.groundColor.withOpacity(0.4);
         final treeR = Random(77);
         for (int i = 0; i < 12; i++) {
@@ -1146,7 +1240,6 @@ class BackgroundDetailPainter extends CustomPainter {
         break;
 
       case WorldTheme.lightDesert:
-      // Sun
         final sunX = size.width * 0.82;
         final sunY = size.height * 0.15;
         paint.color = Colors.yellow.withOpacity(0.3);
@@ -1155,31 +1248,32 @@ class BackgroundDetailPainter extends CustomPainter {
         canvas.drawCircle(Offset(sunX, sunY), 38, paint);
         paint.color = const Color(0xFFFFE55C);
         canvas.drawCircle(Offset(sunX, sunY), 26, paint);
-        // Cacti silhouettes
         paint.color = const Color(0xFF8B6914).withOpacity(0.3);
         for (int i = 0; i < 5; i++) {
           final cx = size.width * (0.1 + i * 0.2);
           final ch = size.height * 0.08;
           final cy = size.height * 0.72 - ch;
           canvas.drawRRect(
-            RRect.fromRectAndRadius(Rect.fromLTWH(cx - 4, cy, 8, ch), const Radius.circular(4)),
+            RRect.fromRectAndRadius(
+                Rect.fromLTWH(cx - 4, cy, 8, ch),
+                const Radius.circular(4)),
             paint,
           );
         }
         break;
 
       case WorldTheme.neonCity:
-      // Stars/bokeh
         final r2 = Random(33);
         for (int i = 0; i < 80; i++) {
           final x = r2.nextDouble() * size.width;
           final y = r2.nextDouble() * size.height * 0.65;
           final s = r2.nextDouble() * 1.5 + 0.5;
-          paint.color = (i % 2 == 0 ? themeData.uiColor : themeData.uiAccent)
-              .withOpacity((sin(time * 3 + i) * 0.4 + 0.6) * 0.8);
+          paint.color =
+              (i % 2 == 0 ? themeData.uiColor : themeData.uiAccent)
+                  .withOpacity(
+                  (sin(time * 3 + i) * 0.4 + 0.6) * 0.8);
           canvas.drawCircle(Offset(x, y), s, paint);
         }
-        // Building silhouettes
         paint.color = Colors.black.withOpacity(0.6);
         final bR = Random(55);
         for (int i = 0; i < 10; i++) {
@@ -1187,36 +1281,36 @@ class BackgroundDetailPainter extends CustomPainter {
           final bw = 20 + bR.nextDouble() * 40;
           final bh = size.height * (0.1 + bR.nextDouble() * 0.2);
           canvas.drawRect(
-            Rect.fromLTWH(bx, size.height * 0.72 - bh, bw, bh),
-            paint,
-          );
+              Rect.fromLTWH(
+                  bx, size.height * 0.72 - bh, bw, bh),
+              paint);
         }
-        // Neon glow lines on ground
         paint.color = themeData.uiColor.withOpacity(0.15);
         paint.strokeWidth = 1;
         paint.style = PaintingStyle.stroke;
         for (int i = 0; i < 5; i++) {
-          final lx = (time * 80 * (i + 1) * 0.5) % (size.width + 60) - 60;
-          canvas.drawLine(
-            Offset(lx, size.height * 0.72),
-            Offset(lx - 30, size.height),
-            paint,
-          );
+          final lx =
+              (time * 80 * (i + 1) * 0.5) % (size.width + 60) - 60;
+          canvas.drawLine(Offset(lx, size.height * 0.72),
+              Offset(lx - 30, size.height), paint);
         }
         paint.style = PaintingStyle.fill;
         break;
 
       case WorldTheme.snowTundra:
-      // Snowflakes
         final sr = Random(11);
         for (int i = 0; i < 40; i++) {
-          final sx = (sr.nextDouble() * size.width + time * 20 * (i % 3 + 1)) % size.width;
-          final sy = (sr.nextDouble() * size.height * 0.7 + time * 15 * (i % 2 + 1)) %
+          final sx =
+              (sr.nextDouble() * size.width +
+                  time * 20 * (i % 3 + 1)) %
+                  size.width;
+          final sy = (sr.nextDouble() * size.height * 0.7 +
+              time * 15 * (i % 2 + 1)) %
               (size.height * 0.7);
           paint.color = Colors.white.withOpacity(0.6);
-          canvas.drawCircle(Offset(sx, sy), sr.nextDouble() * 2 + 1, paint);
+          canvas.drawCircle(
+              Offset(sx, sy), sr.nextDouble() * 2 + 1, paint);
         }
-        // Mountain silhouettes
         paint.color = const Color(0xFF90AFC5).withOpacity(0.4);
         final mPath = Path();
         mPath.moveTo(0, size.height * 0.72);
@@ -1258,11 +1352,8 @@ class GroundDetailPainter extends CustomPainter {
       ..color = themeData.groundAccent.withOpacity(0.5)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
-
     final groundTop = size.height * 0.72;
     final offset = (time * speed * 36) % 80;
-
-    // Dashes/lines on ground
     for (double x = -offset; x < size.width + 80; x += 80) {
       canvas.drawLine(
         Offset(x, groundTop + 12),
@@ -1273,7 +1364,8 @@ class GroundDetailPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant GroundDetailPainter old) => old.time != old.time;
+  bool shouldRepaint(covariant GroundDetailPainter old) =>
+      old.time != time;
 }
 
 class ObstaclePainter extends CustomPainter {
@@ -1281,11 +1373,10 @@ class ObstaclePainter extends CustomPainter {
   final WorldThemeData themeData;
   final double groundY;
 
-  ObstaclePainter({
-    required this.obstacles,
-    required this.themeData,
-    required this.groundY,
-  });
+  ObstaclePainter(
+      {required this.obstacles,
+        required this.themeData,
+        required this.groundY});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1304,11 +1395,9 @@ class ObstaclePainter extends CustomPainter {
         Rect.fromLTRB(left, top, right, bottom),
         const Radius.circular(4),
       );
-
       canvas.drawRRect(rect, glowPaint);
       canvas.drawRRect(rect, paint);
 
-      // Decorative top
       paint.color = themeData.obstacleColor.withOpacity(0.7);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -1348,16 +1437,17 @@ class CharacterPainter extends CustomPainter {
 
     final cx = x * size.width;
     final cy = y * size.height;
-
     final bodyH = isDucking ? 0.05 : 0.10;
-    final bodyW = 0.045;
+    const bodyW = 0.045;
 
     final paint = Paint();
 
     // Glow
     paint
-      ..color = themeData.characterAccent.withOpacity(isMismatched ? 0.8 : 0.35)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, isMismatched ? 16 : 10);
+      ..color = themeData.characterAccent
+          .withOpacity(isMismatched ? 0.8 : 0.35)
+      ..maskFilter =
+      MaskFilter.blur(BlurStyle.normal, isMismatched ? 16 : 10);
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(cx, cy - bodyH * size.height * 0.5),
@@ -1370,17 +1460,19 @@ class CharacterPainter extends CustomPainter {
 
     // Body
     paint.color = themeData.characterColor;
-    final bodyRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(cx, cy - bodyH * size.height * 0.5),
-        width: bodyW * size.width,
-        height: bodyH * size.height,
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(cx, cy - bodyH * size.height * 0.5),
+          width: bodyW * size.width,
+          height: bodyH * size.height,
+        ),
+        const Radius.circular(8),
       ),
-      const Radius.circular(8),
+      paint,
     );
-    canvas.drawRRect(bodyRect, paint);
 
-    // Accent stripe
+    // Stripe
     paint.color = themeData.characterAccent;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -1397,46 +1489,38 @@ class CharacterPainter extends CustomPainter {
     // Eyes
     paint.color = Colors.white;
     canvas.drawCircle(
-      Offset(cx + 6, cy - bodyH * size.height * 0.75),
-      4,
-      paint,
-    );
+        Offset(cx + 6, cy - bodyH * size.height * 0.75), 4, paint);
     paint.color = themeData.characterColor;
     canvas.drawCircle(
-      Offset(cx + 7, cy - bodyH * size.height * 0.75),
-      2,
-      paint,
-    );
+        Offset(cx + 7, cy - bodyH * size.height * 0.75), 2, paint);
 
-    // Running legs (animated)
+    // Legs
     if (!isJumping) {
       final legAnim = sin(time * 12) * 6;
-      paint.color = themeData.characterColor;
-      paint.strokeWidth = 4;
-      paint.strokeCap = StrokeCap.round;
-      paint.style = PaintingStyle.stroke;
-      canvas.drawLine(
-        Offset(cx - 4, cy),
-        Offset(cx - 8, cy + legAnim.abs() + 4),
-        paint,
-      );
-      canvas.drawLine(
-        Offset(cx + 4, cy),
-        Offset(cx + 8, cy - legAnim.abs() + 8),
-        paint,
-      );
+      paint
+        ..color = themeData.characterColor
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(Offset(cx - 4, cy),
+          Offset(cx - 8, cy + legAnim.abs() + 4), paint);
+      canvas.drawLine(Offset(cx + 4, cy),
+          Offset(cx + 8, cy - legAnim.abs() + 8), paint);
       paint.style = PaintingStyle.fill;
     }
 
-    // Mismatch X indicator
+    // Mismatch X
     if (isMismatched) {
-      paint.color = Colors.red.withOpacity(0.9);
-      paint.strokeWidth = 3;
-      paint.style = PaintingStyle.stroke;
+      paint
+        ..color = CD.red.withOpacity(0.9)
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke;
       final mx = cx + 16;
       final my = cy - bodyH * size.height * 1.3;
-      canvas.drawLine(Offset(mx - 6, my - 6), Offset(mx + 6, my + 6), paint);
-      canvas.drawLine(Offset(mx + 6, my - 6), Offset(mx - 6, my + 6), paint);
+      canvas.drawLine(
+          Offset(mx - 6, my - 6), Offset(mx + 6, my + 6), paint);
+      canvas.drawLine(
+          Offset(mx + 6, my - 6), Offset(mx - 6, my + 6), paint);
       paint.style = PaintingStyle.fill;
     }
   }

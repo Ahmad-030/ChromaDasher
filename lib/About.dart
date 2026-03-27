@@ -173,10 +173,10 @@ class AboutScreen extends StatelessWidget {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Ahmad Asif',
+                                Text('developername',
                                     style: CD.label(15, Colors.white, ls: 1)),
                                 const SizedBox(height: 4),
-                                Text('ahmad.asif.dev@gmail.com',
+                                Text('developername.dev@gmail.com',
                                     style: CD.body(
                                         12,
                                         CD.violet.withOpacity(0.8))),
@@ -195,7 +195,7 @@ class AboutScreen extends StatelessWidget {
 
                       Center(
                         child: Text(
-                          '© 2024 Ahmad Asif. All rights reserved.',
+                          '© 2024 developername. All rights reserved.',
                           style: CD.body(
                               11, Colors.white.withOpacity(0.25)),
                           textAlign: TextAlign.center,

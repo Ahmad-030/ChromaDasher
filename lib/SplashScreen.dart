@@ -154,9 +154,7 @@ class _SplashScreenState extends State<SplashScreen>
 
               const SizedBox(height: 80),
 
-              Text('by Ahmad Asif',
-                  style: CD.body(12, Colors.white.withOpacity(0.3))),
-            ],
+              ],
           ),
         ),
       ),
