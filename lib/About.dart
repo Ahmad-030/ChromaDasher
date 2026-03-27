@@ -72,9 +72,7 @@ class AboutScreen extends StatelessWidget {
                             Text('CHROMADASHER',
                                 style: CD.glow(24, CD.cyan, ls: 5)),
                             const SizedBox(height: 4),
-                            Text('Version 1.0.0',
-                                style: CD.body(
-                                    12, Colors.white.withOpacity(0.4))),
+
                           ],
                         ),
                       ),
