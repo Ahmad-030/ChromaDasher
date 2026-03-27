@@ -275,3 +275,70 @@ class NeonDivider extends StatelessWidget {
     );
   }
 }
+
+class ThemeSlot extends StatelessWidget {
+  final String label;
+  final String name;
+  final IconData icon;
+  final Color color;
+  final CrossAxisAlignment align;
+  final bool iconOnLeft;
+
+  const ThemeSlot({
+    required this.label,
+    required this.name,
+    required this.icon,
+    required this.color,
+    required this.align,
+    required this.iconOnLeft,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconWidget = Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withOpacity(0.15),
+        border: Border.all(color: color.withOpacity(0.6), width: 1.4),
+      ),
+      child: Icon(icon, color: color, size: 17),
+    );
+
+    final textCol = Column(
+      crossAxisAlignment: align,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: CD.label(8, Colors.white.withOpacity(0.45), ls: 1.2),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          name,
+          style: CD.label(11, Colors.white, ls: 0.4),
+          // No overflow / ellipsis — fits because Expanded wraps this slot
+        ),
+      ],
+    );
+
+    return Expanded(
+      child: Row(
+        mainAxisAlignment:
+        iconOnLeft ? MainAxisAlignment.start : MainAxisAlignment.end,
+        children: iconOnLeft
+            ? [
+          iconWidget,
+          const SizedBox(width: 10),
+          Flexible(child: textCol),
+        ]
+            : [
+          Flexible(child: textCol),
+          const SizedBox(width: 10),
+          iconWidget,
+        ],
+      ),
+    );
+  }
+}

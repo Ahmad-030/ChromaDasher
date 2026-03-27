@@ -135,7 +135,7 @@ class GameState {
   bool isPaused = false;
 
   int score = 0;
-  double speed = 5.0;
+  double speed = 4.0;
   double timeToNextTheme = 10.0;
   double totalTime = 0.0;
 
@@ -160,7 +160,7 @@ class GameState {
     isStarted = false;
     isPaused = false;
     score = 0;
-    speed = 5.0;
+    speed = 4.0;
     timeToNextTheme = 10.0;
     totalTime = 0.0;
     currentTheme = WorldTheme.darkForest;
@@ -762,6 +762,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+
   // ── Bottom swap / theme toggle ───────────────────────────────────────────
 
   Widget _buildThemeToggle(WorldThemeData td, WorldThemeData pd) {
@@ -771,132 +772,74 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return GestureDetector(
       onTap: _togglePlayerTheme,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        padding:
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: CD.neonBox(accent, r: 20,
-            fill: Colors.black.withOpacity(0.65)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: CD.neonBox(accent, r: 22,
+            fill: Colors.black.withOpacity(0.70)),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Player theme
-            Expanded(
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(pd.characterAccent.value)
-                          .withOpacity(0.2),
-                      border: Border.all(
-                          color: Color(pd.characterAccent.value)
-                              .withOpacity(0.7)),
+
+            // ── Left: MY THEME ──────────────────────────────────────────
+            ThemeSlot(
+              label: 'MY THEME',
+              name: pd.name,
+              icon: pd.icon,
+              color: Color(pd.characterAccent.value),
+              align: CrossAxisAlignment.start,
+              iconOnLeft: true,
+            ),
+
+            // ── Centre: SYNCED / SWAP badge ─────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: accent, width: 1.6),
+                  boxShadow: [
+                    BoxShadow(
+                        color: accent.withOpacity(0.45),
+                        blurRadius: 14,
+                        spreadRadius: 1),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isMatched
+                          ? Icons.check_circle_rounded
+                          : Icons.sync_rounded,
+                      color: accent,
+                      size: 15,
                     ),
-                    child: Icon(pd.icon,
-                        color: Color(pd.characterAccent.value),
-                        size: 16),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('MY THEME',
-                            style: CD.label(
-                                8,
-                                Colors.white.withOpacity(0.5),
-                                ls: 1)),
-                        Text(
-                          pd.name,
-                          style: CD.label(11, Colors.white, ls: 0.5),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    const SizedBox(width: 6),
+                    Text(
+                      isMatched ? 'SYNCED' : 'SWAP!',
+                      style: CD.label(12, accent, ls: 1.5),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
-            const SizedBox(width: 8),
-
-            // Sync badge (fixed, never expands)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
-              decoration: CD.neonBox(accent, r: 10,
-                  fill: accent.withOpacity(0.15)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isMatched
-                        ? Icons.check_circle_rounded
-                        : Icons.sync_rounded,
-                    color: accent,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    isMatched ? 'SYNCED' : 'SWAP!',
-                    style: CD.label(11, accent, ls: 1),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 8),
-
-            // World theme
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('WORLD',
-                            style: CD.label(
-                                8,
-                                Colors.white.withOpacity(0.5),
-                                ls: 1)),
-                        Text(
-                          td.name,
-                          style: CD.label(11, Colors.white, ls: 0.5),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color:
-                      Color(td.uiColor.value).withOpacity(0.2),
-                      border: Border.all(
-                          color: Color(td.uiColor.value)
-                              .withOpacity(0.7)),
-                    ),
-                    child: Icon(td.icon,
-                        color: Color(td.uiColor.value), size: 16),
-                  ),
-                ],
-              ),
+            // ── Right: WORLD ─────────────────────────────────────────────
+            ThemeSlot(
+              label: 'WORLD',
+              name: td.name,
+              icon: td.icon,
+              color: Color(td.uiColor.value),
+              align: CrossAxisAlignment.end,
+              iconOnLeft: false,
             ),
           ],
         ),
       ),
     );
   }
-
   // ── Start screen ─────────────────────────────────────────────────────────
 
   Widget _buildStartScreen(WorldThemeData td) {

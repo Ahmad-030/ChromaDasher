@@ -178,7 +178,7 @@ class AboutScreen extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Text('developername.dev@gmail.com',
                                     style: CD.body(
-                                        12,
+                                        10,
                                         CD.violet.withOpacity(0.8))),
                                 const SizedBox(height: 2),
                                 Text('Android Developer',
