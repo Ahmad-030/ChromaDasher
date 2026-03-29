@@ -1,4 +1,3 @@
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  6.  ABOUT SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
@@ -171,18 +170,15 @@ class AboutScreen extends StatelessWidget {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('developername',
+                                Text('Pittip Game Inc.',
                                     style: CD.label(15, Colors.white, ls: 1)),
                                 const SizedBox(height: 4),
-                                Text('developername.dev@gmail.com',
+                                Text('lelamson118@gmail.com',
                                     style: CD.body(
                                         10,
                                         CD.violet.withOpacity(0.8))),
                                 const SizedBox(height: 2),
-                                Text('Android Developer',
-                                    style: CD.body(
-                                        11,
-                                        Colors.white.withOpacity(0.4))),
+                               
                               ],
                             ),
                           ],
@@ -193,7 +189,7 @@ class AboutScreen extends StatelessWidget {
 
                       Center(
                         child: Text(
-                          '© 2024 developername. All rights reserved.',
+                          '© 2024 Pittip Game Inc. All rights reserved.',
                           style: CD.body(
                               11, Colors.white.withOpacity(0.25)),
                           textAlign: TextAlign.center,

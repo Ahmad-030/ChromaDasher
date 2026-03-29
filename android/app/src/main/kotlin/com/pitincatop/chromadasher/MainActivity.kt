@@ -1,4 +1,4 @@
-package com.example.chromadasher
+package com.pitincatop.chromadasher
 
 import io.flutter.embedding.android.FlutterActivity
 
