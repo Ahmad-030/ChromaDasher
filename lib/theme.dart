@@ -313,29 +313,33 @@ class ThemeSlot extends StatelessWidget {
         Text(
           label,
           style: CD.label(8, Colors.white.withOpacity(0.45), ls: 1.2),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
         const SizedBox(height: 2),
         Text(
           name,
           style: CD.label(11, Colors.white, ls: 0.4),
-          // No overflow / ellipsis — fits because Expanded wraps this slot
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
       ],
     );
 
     return Expanded(
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment:
         iconOnLeft ? MainAxisAlignment.start : MainAxisAlignment.end,
         children: iconOnLeft
             ? [
           iconWidget,
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Flexible(child: textCol),
         ]
             : [
           Flexible(child: textCol),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           iconWidget,
         ],
       ),

@@ -4,6 +4,8 @@ import 'package:chromadasher/score_service.dart';
 import 'package:chromadasher/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:chromadasher/audio_service.dart';
 
 // ─── Theme Definitions ───────────────────────────────────────────────────────
 
@@ -143,6 +145,7 @@ class GameState {
   WorldTheme currentTheme = WorldTheme.darkForest;
   WorldTheme? pendingTheme;
   bool themeMismatched = false;
+  double mismatchTimer = 0.0;
 
   List<Obstacle> obstacles = [];
   List<Particle> particles = [];
@@ -168,10 +171,190 @@ class GameState {
     playerTheme = WorldTheme.darkForest;
     pendingTheme = null;
     themeMismatched = false;
+    mismatchTimer = 0.0;
     obstacles.clear();
     particles.clear();
     obstacleTimer = 0;
     obstacleInterval = 2.5;
+  }
+}
+
+// ─── Tutorial Popup ───────────────────────────────────────────────────────────
+
+class _TutorialStep {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String body;
+  const _TutorialStep({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+  });
+}
+
+const List<_TutorialStep> _kTutorialSteps = [
+  _TutorialStep(
+    icon: Icons.swap_horiz_rounded,
+    color: CD.cyan,
+    title: 'MATCH THE WORLD',
+    body: 'The world changes theme every 10 seconds.\nYour character MUST match the world theme.',
+  ),
+  _TutorialStep(
+    icon: Icons.sync_rounded,
+    color: CD.magenta,
+    title: 'TAP SWAP!',
+    body:
+    'When the world switches, tap the big\nSWAP button at the bottom to change\nyour character\'s theme.',
+  ),
+  _TutorialStep(
+    icon: Icons.warning_amber_rounded,
+    color: CD.amber,
+    title: 'DON\'T WAIT!',
+    body:
+    'If you stay mismatched for 3 seconds\nyou\'re eliminated. A red flash warns you.\nSwap fast!',
+  ),
+  _TutorialStep(
+    icon: Icons.touch_app_rounded,
+    color: CD.green,
+    title: 'JUMP TO SURVIVE',
+    body:
+    'Tap anywhere on screen to jump\nover obstacles. The longer you last,\nthe faster it gets!',
+  ),
+];
+
+class _TutorialDialog extends StatefulWidget {
+  const _TutorialDialog();
+
+  @override
+  State<_TutorialDialog> createState() => _TutorialDialogState();
+}
+
+class _TutorialDialogState extends State<_TutorialDialog>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+  )..forward();
+
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _next() {
+    if (_page < _kTutorialSteps.length - 1) {
+      setState(() => _page++);
+      _ctrl.forward(from: 0);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final step = _kTutorialSteps[_page];
+    final isLast = _page == _kTutorialSteps.length - 1;
+
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: FadeTransition(
+          opacity: _ctrl,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.06),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic)),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+              decoration: CD.neonBox(step.color, r: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ── Step dots ──
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(_kTutorialSteps.length, (i) {
+                      final active = i == _page;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: active ? 22 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: active ? step.color : Colors.white24,
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: active
+                              ? [BoxShadow(color: step.color.withOpacity(0.6), blurRadius: 8)]
+                              : [],
+                        ),
+                      );
+                    }),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // ── Icon ──
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: step.color.withOpacity(0.12),
+                      border: Border.all(color: step.color.withOpacity(0.6), width: 2),
+                      boxShadow: [
+                        BoxShadow(color: step.color.withOpacity(0.4), blurRadius: 28),
+                      ],
+                    ),
+                    child: Icon(step.icon, color: step.color, size: 38),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Text(step.title, style: CD.glow(20, step.color, ls: 3)),
+
+                  const SizedBox(height: 14),
+
+                  Text(
+                    step.body,
+                    style: CD.body(14, Colors.white.withOpacity(0.75)),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  NeonButton(
+                    label: isLast ? 'GOT IT — LET\'S GO!' : 'NEXT',
+                    icon: isLast ? Icons.play_arrow_rounded : Icons.arrow_forward_rounded,
+                    color: step.color,
+                    fontSize: 14,
+                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 16),
+                    onTap: _next,
+                  ),
+
+                  if (!isLast) ...[
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Text(
+                        'SKIP',
+                        style: CD.label(11, Colors.white.withOpacity(0.3), ls: 2),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -188,7 +371,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final GameState _state = GameState();
   final Random _random = Random();
 
-  // ── CHANGE 1: track the game mode passed via route arguments ──
   String _mode = 'endless';
 
   late AnimationController _tickController;
@@ -206,9 +388,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool _showThemeWarning = false;
   double _warningAlpha = 0;
 
+  // Tutorial flag
+  bool _tutorialSeen = false;
+  bool _tutorialChecked = false;
+
+  // Music toggle (mirrors AudioService)
+  bool _musicOn = AudioService.instance.musicOn;
+
   static const double kGroundY = 0.72;
   static const double kCharacterX = 0.18;
-
   static const double kGravity = 0.010;
   static const double kJumpForce = -0.20;
 
@@ -224,12 +412,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // ── CHANGE 2: read the mode argument once the widget tree is ready ──
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is String) {
-        _mode = args;
-      }
+      if (args is String) _mode = args;
+      _checkTutorial();
     });
 
     _themeTransitionCtrl = AnimationController(
@@ -243,6 +429,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     )..addListener(_tick);
 
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  Future<void> _checkTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    _tutorialSeen = prefs.getBool('chroma_seen_tutorial') ?? false;
+    _tutorialChecked = true;
+    setState(() {});
+  }
+
+  Future<void> _showTutorialIfNeeded() async {
+    if (_tutorialSeen) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('chroma_seen_tutorial', true);
+    _tutorialSeen = true;
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.88),
+      builder: (_) => const _TutorialDialog(),
+    );
   }
 
   @override
@@ -266,7 +473,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _jump() {
     if (!_state.isStarted) {
-      _startGame();
+      _showTutorialIfNeeded().then((_) => _startGame());
       return;
     }
     if (!_state.isAlive) return;
@@ -297,6 +504,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final currentIdx = themes.indexOf(_state.playerTheme);
     _state.playerTheme = themes[(currentIdx + 1) % themes.length];
     _state.themeMismatched = _state.playerTheme != _state.currentTheme;
+    if (!_state.themeMismatched) _state.mismatchTimer = 0.0;
     HapticFeedback.selectionClick();
     setState(() {});
   }
@@ -309,6 +517,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _state.timeToNextTheme -= dt;
     _state.score = (_state.totalTime * 10).toInt();
     _state.speed = 5.0 + _state.totalTime * 0.08;
+
+    // Mismatch countdown
+    if (_state.themeMismatched) {
+      _state.mismatchTimer += dt;
+    } else {
+      _state.mismatchTimer = 0.0;
+    }
 
     if (_state.timeToNextTheme <= 3.0 && !_showThemeWarning) {
       _showThemeWarning = true;
@@ -367,6 +582,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
+    // Mismatch death after 3 seconds
+    if (_state.themeMismatched && _state.mismatchTimer >= 3.0) {
+      _die();
+      return;
+    }
+
     _spawnRunParticles();
     _updateParticles(dt);
 
@@ -392,8 +613,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _state.isAlive = false;
     _tickController.stop();
     HapticFeedback.heavyImpact();
-
-    // ── CHANGE 3: persist the score ──
     ScoreService.saveScore(_state.score, _mode);
 
     for (int i = 0; i < 30; i++) {
@@ -426,14 +645,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _themeTransitionProgress = 0.0;
 
     _state.themeMismatched = _state.playerTheme != _state.currentTheme;
-
-    if (_state.themeMismatched) {
-      Future.delayed(const Duration(seconds: 3), () {
-        if (_state.isAlive && _state.themeMismatched && mounted) {
-          _die();
-        }
-      });
-    }
+    _state.mismatchTimer = 0.0;
 
     HapticFeedback.mediumImpact();
   }
@@ -468,6 +680,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final size = MediaQuery.of(context).size;
     final td = kThemes[_state.currentTheme]!;
     final pd = kThemes[_state.playerTheme]!;
+
+    // Pulse value for mismatch animations (fast strobe)
+    final double pulseVal =
+    _state.themeMismatched ? (sin(_state.totalTime * 9) * 0.5 + 0.5) : 0.0;
 
     return Scaffold(
       backgroundColor: CD.bg,
@@ -574,9 +790,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               Positioned.fill(
                 child: IgnorePointer(
                   child: Container(
-                    color: CD.red.withOpacity(
-                      (sin(_state.totalTime * 6) * 0.5 + 0.5) * 0.2,
-                    ),
+                    color: CD.red.withOpacity(pulseVal * 0.22),
                   ),
                 ),
               ),
@@ -589,7 +803,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   if (_showThemeWarning && _state.isStarted && _state.isAlive)
                     _buildThemeWarning(),
                   if (_state.themeMismatched && _state.isStarted && _state.isAlive)
-                    _buildMismatchWarning(),
+                    _buildMismatchWarning(pulseVal),
                 ],
               ),
             ),
@@ -600,7 +814,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: SafeArea(child: _buildThemeToggle(td, pd)),
+                child: SafeArea(child: _buildThemeToggle(td, pd, pulseVal)),
               ),
 
             // ── START SCREEN ──
@@ -618,6 +832,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+  // ─── TOP BAR ───────────────────────────────────────────────────────────────
 
   Widget _buildTopBar(WorldThemeData td) {
     final progress = (_state.timeToNextTheme / 10.0).clamp(0.0, 1.0);
@@ -650,8 +866,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
           Expanded(
             child: Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: CD.neonBox(Color(td.uiColor.value), r: 14),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -707,14 +922,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.all(10),
               decoration: CD.neonBox(CD.violet, r: 12),
-              child: const Icon(Icons.pause_rounded,
-                  color: CD.violet, size: 16),
+              child: const Icon(Icons.pause_rounded, color: CD.violet, size: 16),
             ),
           ),
         ],
       ),
     );
   }
+
+  // ─── THEME CHANGE WARNING BANNER ───────────────────────────────────────────
 
   Widget _buildThemeWarning() {
     final nextIdx = (_themeIndex + 1) % _themeOrder.length;
@@ -723,8 +939,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration:
-      CD.neonBox(CD.amber, r: 12, fill: CD.amber.withOpacity(0.18)),
+      decoration: CD.neonBox(CD.amber, r: 12, fill: CD.amber.withOpacity(0.18)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -732,7 +947,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              'THEME → ${nextTd.name.toUpperCase()}',
+              'THEME CHANGING → ${nextTd.name.toUpperCase()}',
               style: CD.label(11, CD.amber, ls: 1),
               overflow: TextOverflow.ellipsis,
             ),
@@ -744,86 +959,174 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMismatchWarning() {
-    return Container(
+  // ─── MISMATCH WARNING BANNER (with countdown) ──────────────────────────────
+
+  Widget _buildMismatchWarning(double pulseVal) {
+    final secondsLeft = (3.0 - _state.mismatchTimer).clamp(0.0, 3.0);
+    final urgent = secondsLeft < 1.5;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 100),
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: CD.neonBox(CD.red, r: 12, fill: CD.red.withOpacity(0.18)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: CD.red.withOpacity(0.15 + pulseVal * 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: CD.red.withOpacity(0.6 + pulseVal * 0.4),
+          width: urgent ? 2.0 : 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: CD.red.withOpacity(0.3 + pulseVal * 0.3),
+            blurRadius: 16 + pulseVal * 12,
+            spreadRadius: pulseVal * 3,
+          ),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.dangerous_rounded, color: CD.red, size: 16),
+          const Icon(Icons.dangerous_rounded, color: CD.red, size: 18),
           const SizedBox(width: 8),
-          Text('MISMATCH! TAP SWAP NOW!',
-              style: CD.label(11, CD.red, ls: 1)),
+          Flexible(
+            child: Text(
+              urgent
+                  ? '⚠  SWAP NOW OR DIE!  ⚠'
+                  : 'MISMATCH! TAP SWAP BUTTON NOW!',
+              style: CD.label(urgent ? 12 : 11, CD.red, ls: 1),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Countdown circle
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: CD.red.withOpacity(0.2),
+              border: Border.all(color: CD.red, width: 1.5),
+            ),
+            child: Center(
+              child: Text(
+                secondsLeft.ceil().toString(),
+                style: CD.glow(13, CD.red, ls: 0),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildThemeToggle(WorldThemeData td, WorldThemeData pd) {
+  // ─── SWAP BUTTON (bottom) ──────────────────────────────────────────────────
+
+  Widget _buildThemeToggle(WorldThemeData td, WorldThemeData pd, double pulseVal) {
     final isMatched = _state.playerTheme == _state.currentTheme;
     final accent = isMatched ? CD.green : CD.red;
 
     return GestureDetector(
       onTap: _togglePlayerTheme,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration:
-        CD.neonBox(accent, r: 22, fill: Colors.black.withOpacity(0.70)),
-        child: Row(
-          children: [
-            ThemeSlot(
-              label: 'MY THEME',
-              name: pd.name,
-              icon: pd.icon,
-              color: Color(pd.characterAccent.value),
-              align: CrossAxisAlignment.start,
-              iconOnLeft: true,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isMatched
+                ? accent.withOpacity(0.65)
+                : accent.withOpacity(0.55 + 0.45 * pulseVal),
+            width: isMatched ? 1.5 : 2.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withOpacity(isMatched ? 0.28 : 0.45 + 0.4 * pulseVal),
+              blurRadius: isMatched ? 22 : 30 + pulseVal * 20,
+              spreadRadius: isMatched ? 2 : 4 + pulseVal * 4,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(50),
-                  border: Border.all(color: accent, width: 1.6),
-                  boxShadow: [
-                    BoxShadow(
-                        color: accent.withOpacity(0.45),
-                        blurRadius: 14,
-                        spreadRadius: 1),
-                  ],
-                ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Urgent mismatch label ──
+            if (!isMatched)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 7),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      isMatched
-                          ? Icons.check_circle_rounded
-                          : Icons.sync_rounded,
-                      color: accent,
-                      size: 15,
-                    ),
-                    const SizedBox(width: 6),
+                    Icon(Icons.warning_rounded, color: CD.red, size: 13),
+                    const SizedBox(width: 5),
                     Text(
-                      isMatched ? 'SYNCED' : 'SWAP!',
-                      style: CD.label(12, accent, ls: 1.5),
+                      'THEME MISMATCH — TAP HERE TO SWAP!',
+                      style: CD.label(10, CD.red, ls: 1.1),
                     ),
+                    const SizedBox(width: 5),
+                    Icon(Icons.warning_rounded, color: CD.red, size: 13),
                   ],
                 ),
               ),
-            ),
-            ThemeSlot(
-              label: 'WORLD',
-              name: td.name,
-              icon: td.icon,
-              color: Color(td.uiColor.value),
-              align: CrossAxisAlignment.end,
-              iconOnLeft: false,
+
+            Row(
+              children: [
+                ThemeSlot(
+                  label: 'MY THEME',
+                  name: pd.name,
+                  icon: pd.icon,
+                  color: Color(pd.characterAccent.value),
+                  align: CrossAxisAlignment.start,
+                  iconOnLeft: true,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: accent.withOpacity(
+                          isMatched ? 0.18 : 0.20 + 0.18 * pulseVal),
+                      borderRadius: BorderRadius.circular(50),
+                      border: Border.all(color: accent, width: 1.6),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withOpacity(
+                              isMatched ? 0.45 : 0.55 + 0.35 * pulseVal),
+                          blurRadius: isMatched ? 14 : 22 + pulseVal * 14,
+                          spreadRadius: isMatched ? 1 : 3 + pulseVal * 3,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isMatched
+                              ? Icons.check_circle_rounded
+                              : Icons.sync_rounded,
+                          color: accent,
+                          size: 15,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          isMatched ? 'SYNCED' : 'SWAP!',
+                          style: CD.label(12, accent, ls: 1.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                ThemeSlot(
+                  label: 'WORLD',
+                  name: td.name,
+                  icon: td.icon,
+                  color: Color(td.uiColor.value),
+                  align: CrossAxisAlignment.end,
+                  iconOnLeft: false,
+                ),
+              ],
             ),
           ],
         ),
@@ -831,13 +1134,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ─── START SCREEN ──────────────────────────────────────────────────────────
+
   Widget _buildStartScreen(WorldThemeData td) {
     return Positioned.fill(
       child: NeonBg(
         child: Center(
           child: SingleChildScrollView(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -846,10 +1150,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   height: 90,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: RadialGradient(colors: [
-                      CD.violet.withOpacity(0.6),
-                      Colors.black
-                    ]),
+                    gradient: RadialGradient(
+                        colors: [CD.violet.withOpacity(0.6), Colors.black]),
                     border: Border.all(
                         color: CD.cyan.withOpacity(0.6), width: 2),
                     boxShadow: [
@@ -865,8 +1167,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 Text('DASHER', style: CD.glow(30, CD.magenta, ls: 8)),
                 const SizedBox(height: 4),
                 Text('ENDLESS THEME RUNNER',
-                    style: CD.label(
-                        10, Colors.white.withOpacity(0.4), ls: 3)),
+                    style: CD.label(10, Colors.white.withOpacity(0.4), ls: 3)),
                 const SizedBox(height: 32),
                 NeonDivider(color: CD.violet),
                 const SizedBox(height: 24),
@@ -874,10 +1175,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     'Match your theme to the world!'),
                 const SizedBox(height: 12),
                 _startInfoRow(Icons.touch_app_rounded, CD.magenta,
-                    'Tap screen to jump'),
+                    'Tap screen to jump over obstacles'),
                 const SizedBox(height: 12),
                 _startInfoRow(Icons.sync_rounded, CD.violet,
-                    'Tap SWAP to change your theme'),
+                    'Tap SWAP button to change your theme'),
                 const SizedBox(height: 12),
                 _startInfoRow(Icons.timer_outlined, CD.amber,
                     'Stay mismatched 3s = Game Over'),
@@ -889,7 +1190,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   fontSize: 16,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 48, vertical: 18),
-                  onTap: _startGame,
+                  onTap: _jump,
                 ),
                 const SizedBox(height: 20),
                 GestureDetector(
@@ -923,15 +1224,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ─── PAUSE OVERLAY ─────────────────────────────────────────────────────────
+
+  Future<void> _toggleMusic() async {
+    await AudioService.instance.toggle();
+    setState(() => _musicOn = AudioService.instance.musicOn);
+    HapticFeedback.selectionClick();
+  }
+
   Widget _buildPauseOverlay(WorldThemeData td) {
+    final musicColor = _musicOn ? CD.green : Colors.white38;
+    final musicIcon =
+    _musicOn ? Icons.volume_up_rounded : Icons.volume_off_rounded;
+    final musicLabel = _musicOn ? 'MUSIC ON' : 'MUSIC OFF';
+
     return Positioned.fill(
       child: Container(
         color: Colors.black.withOpacity(0.78),
         child: Center(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 28),
-            padding: const EdgeInsets.symmetric(
-                horizontal: 32, vertical: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
             decoration: CD.neonBox(CD.cyan, r: 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -946,6 +1259,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 const SizedBox(height: 24),
                 NeonDivider(color: CD.cyan),
                 const SizedBox(height: 20),
+
+                // ── Score chip ──
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 20, vertical: 12),
@@ -964,6 +1279,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // ── Resume ──
                 NeonButton(
                   label: 'RESUME',
                   icon: Icons.play_arrow_rounded,
@@ -973,6 +1290,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   onTap: _togglePause,
                 ),
                 const SizedBox(height: 14),
+
+                // ── Restart ──
                 NeonButton(
                   label: 'RESTART',
                   icon: Icons.replay_rounded,
@@ -980,6 +1299,51 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   onTap: _startGame,
                 ),
                 const SizedBox(height: 14),
+
+                // ── Music toggle ──
+                GestureDetector(
+                  onTap: _toggleMusic,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 36, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: musicColor.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(50),
+                      border: Border.all(color: musicColor, width: 1.8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: musicColor.withOpacity(0.30),
+                          blurRadius: 16,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          transitionBuilder: (child, anim) =>
+                              ScaleTransition(scale: anim, child: child),
+                          child: Icon(musicIcon,
+                              key: ValueKey(musicIcon),
+                              color: musicColor,
+                              size: 18),
+                        ),
+                        const SizedBox(width: 10),
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: CD.label(15, musicColor),
+                          child: Text(musicLabel),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // ── Main Menu ──
                 NeonButton(
                   label: 'MAIN MENU',
                   icon: Icons.home_rounded,
@@ -995,14 +1359,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ─── GAME OVER OVERLAY ─────────────────────────────────────────────────────
+
   Widget _buildGameOver(WorldThemeData td) {
     return Positioned.fill(
       child: Container(
         color: Colors.black.withOpacity(0.80),
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 28, vertical: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1029,8 +1394,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _statChip(
-                              'TIME',
+                          _statChip('TIME',
                               '${_state.totalTime.toStringAsFixed(1)}s',
                               CD.violet),
                           _statChip(
@@ -1041,8 +1405,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                   .first
                                   .toUpperCase(),
                               CD.amber),
-                          _statChip(
-                              'SPEED',
+                          _statChip('SPEED',
                               '${_state.speed.toStringAsFixed(1)}x',
                               CD.green),
                         ],
@@ -1065,7 +1428,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   label: 'LEADERBOARD',
                   icon: Icons.leaderboard_rounded,
                   color: CD.violet,
-                  onTap: () => Navigator.pushNamed(context, '/highscore'),
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/highscore'),
                 ),
                 const SizedBox(height: 14),
                 NeonButton(
