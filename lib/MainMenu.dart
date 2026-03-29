@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  2.  MAIN MENU SCREEN
+//  2.  MAIN MENU SCREEN  (with music toggle)
 // ═══════════════════════════════════════════════════════════════════════════
+import 'package:chromadasher/audio_service.dart';
 import 'package:chromadasher/theme.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,11 +24,20 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       vsync: this, duration: const Duration(milliseconds: 1400))
     ..repeat(reverse: true);
 
+  // Mirror the current music state so the icon rebuilds on toggle.
+  bool _musicOn = AudioService.instance.musicOn;
+
   @override
   void dispose() {
     _entryCtrl.dispose();
     _titlePulse.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleMusic() async {
+    await AudioService.instance.toggle();
+    setState(() => _musicOn = AudioService.instance.musicOn);
+    HapticFeedback.selectionClick();
   }
 
   Widget _stagger(Widget child, int index) {
@@ -42,8 +52,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
             begin: const Offset(0, 0.25), end: Offset.zero)
             .animate(CurvedAnimation(
             parent: _entryCtrl,
-            curve:
-            Interval(start, end, curve: Curves.easeOutCubic))),
+            curve: Interval(start, end, curve: Curves.easeOutCubic))),
         child: child,
       ),
     );
@@ -59,7 +68,35 @@ class _MainMenuScreenState extends State<MainMenuScreen>
             padding: const EdgeInsets.only(bottom: 28),
             child: Column(
               children: [
-                const SizedBox(height: 36),
+                // ── Top-right music toggle ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      GestureDetector(
+                        onTap: _toggleMusic,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.all(10),
+                          decoration: CD.neonBox(
+                            _musicOn ? CD.cyan : Colors.white38,
+                            r: 14,
+                          ),
+                          child: Icon(
+                            _musicOn
+                                ? Icons.music_note_rounded
+                                : Icons.music_off_rounded,
+                            color: _musicOn ? CD.cyan : Colors.white38,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
 
                 // ── Logo ──
                 _stagger(
@@ -82,10 +119,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                               color: CD.cyan, size: 48),
                         ),
                         const SizedBox(height: 6),
-                        Text('CHROMA',
-                            style: CD.glow(34, CD.cyan, ls: 8)),
-                        Text('DASHER',
-                            style: CD.glow(34, CD.magenta, ls: 8)),
+                        Text('CHROMA', style: CD.glow(34, CD.cyan, ls: 8)),
+                        Text('DASHER', style: CD.glow(34, CD.magenta, ls: 8)),
                         const SizedBox(height: 4),
                         Text('ENDLESS THEME RUNNER',
                             style: CD.label(10,
@@ -134,15 +169,13 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                     title: 'LEADERBOARD',
                     subtitle: 'View your top scores',
                     color: CD.violet,
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/highscore'),
+                    onTap: () => Navigator.pushNamed(context, '/highscore'),
                   ),
                   3,
                 ),
 
                 const SizedBox(height: 28),
 
-                // ── Divider ──
                 _stagger(
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -153,30 +186,26 @@ class _MainMenuScreenState extends State<MainMenuScreen>
 
                 const SizedBox(height: 20),
 
-                // ── About ──
                 _stagger(
                   _ModeCard(
                     icon: Icons.info_outline_rounded,
                     title: 'ABOUT',
                     subtitle: 'Game info, features & how to play',
                     color: CD.violet,
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/about'),
+                    onTap: () => Navigator.pushNamed(context, '/about'),
                   ),
                   5,
                 ),
 
                 const SizedBox(height: 14),
 
-                // ── Privacy Policy ──
                 _stagger(
                   _ModeCard(
                     icon: Icons.shield_outlined,
                     title: 'PRIVACY POLICY',
                     subtitle: 'How we handle your data',
                     color: Colors.white54,
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/privacy'),
+                    onTap: () => Navigator.pushNamed(context, '/privacy'),
                   ),
                   6,
                 ),
@@ -189,6 +218,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 class _ModeCard extends StatefulWidget {
   final IconData icon;
   final String title;
@@ -227,8 +257,7 @@ class _ModeCardState extends State<_ModeCard> {
         duration: const Duration(milliseconds: 100),
         transform: Matrix4.identity()..scale(_pressed ? 0.97 : 1.0),
         margin: const EdgeInsets.symmetric(horizontal: 20),
-        padding:
-        const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
         decoration: CD.neonBox(widget.color),
         child: Row(
           children: [
@@ -238,11 +267,10 @@ class _ModeCardState extends State<_ModeCard> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: widget.color.withOpacity(0.15),
-                border: Border.all(
-                    color: widget.color.withOpacity(0.5)),
+                border:
+                Border.all(color: widget.color.withOpacity(0.5)),
               ),
-              child:
-              Icon(widget.icon, color: widget.color, size: 24),
+              child: Icon(widget.icon, color: widget.color, size: 24),
             ),
             const SizedBox(width: 18),
             Expanded(
@@ -250,12 +278,11 @@ class _ModeCardState extends State<_ModeCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(widget.title,
-                      style:
-                      CD.label(15, widget.color, ls: 1.5)),
+                      style: CD.label(15, widget.color, ls: 1.5)),
                   const SizedBox(height: 3),
                   Text(widget.subtitle,
-                      style: CD.body(
-                          12, Colors.white.withOpacity(0.5))),
+                      style:
+                      CD.body(12, Colors.white.withOpacity(0.5))),
                 ],
               ),
             ),

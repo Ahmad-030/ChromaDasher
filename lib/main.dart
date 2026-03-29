@@ -6,8 +6,11 @@ import 'HIghScore.dart';
 import 'MainMenu.dart';
 import 'Privacy_policy.dart';
 import 'SplashScreen.dart';
+import 'audio_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AudioService.instance.init();   // ← start music + load pref
   runApp(const ThemeSwapRunnerApp());
 }
 
