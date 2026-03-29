@@ -19,7 +19,6 @@ class FirstPlayPopup {
     await prefs.setBool(_key, true);
   }
 
-  /// Call this right before _startGame(). Awaits dismissal.
   static Future<void> showIfNeeded(BuildContext context) async {
     if (!await shouldShow()) return;
     await markSeen();
@@ -42,19 +41,13 @@ class _TutorialDialog extends StatefulWidget {
 class _TutorialDialogState extends State<_TutorialDialog>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl =
-  AnimationController(vsync: this, duration: const Duration(milliseconds: 500))
+  AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 500))
     ..forward();
 
   int _page = 0;
 
   static const _steps = [
-    _Step(
-      icon: Icons.swap_horiz_rounded,
-      color: CD.cyan,
-      title: 'MATCH THE WORLD',
-      body:
-      'The world changes theme every 10 seconds.\nYour character MUST match the world theme.',
-    ),
     _Step(
       icon: Icons.sync_rounded,
       color: CD.magenta,
@@ -68,13 +61,6 @@ class _TutorialDialogState extends State<_TutorialDialog>
       title: 'DON\'T WAIT!',
       body:
       'If you stay mismatched for 3 seconds\nyou\'re eliminated. A red flash warns you.\nSwap fast!',
-    ),
-    _Step(
-      icon: Icons.touch_app_rounded,
-      color: CD.green,
-      title: 'JUMP TO SURVIVE',
-      body:
-      'Tap anywhere on screen to jump\nover obstacles. The longer you last,\nthe faster it gets!',
     ),
   ];
 
@@ -102,8 +88,10 @@ class _TutorialDialogState extends State<_TutorialDialog>
       child: FadeTransition(
         opacity: _ctrl,
         child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
-              .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic)),
+          position: Tween<Offset>(
+              begin: const Offset(0, 0.06), end: Offset.zero)
+              .animate(CurvedAnimation(
+              parent: _ctrl, curve: Curves.easeOutCubic)),
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
             padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
@@ -111,7 +99,7 @@ class _TutorialDialogState extends State<_TutorialDialog>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ── Step indicator dots ──
+                // ── Step dots ──
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(_steps.length, (i) {
@@ -125,7 +113,11 @@ class _TutorialDialogState extends State<_TutorialDialog>
                         color: active ? step.color : Colors.white24,
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: active
-                            ? [BoxShadow(color: step.color.withOpacity(0.6), blurRadius: 8)]
+                            ? [
+                          BoxShadow(
+                              color: step.color.withOpacity(0.6),
+                              blurRadius: 8)
+                        ]
                             : [],
                       ),
                     );
@@ -141,9 +133,12 @@ class _TutorialDialogState extends State<_TutorialDialog>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: step.color.withOpacity(0.12),
-                    border: Border.all(color: step.color.withOpacity(0.6), width: 2),
+                    border: Border.all(
+                        color: step.color.withOpacity(0.6), width: 2),
                     boxShadow: [
-                      BoxShadow(color: step.color.withOpacity(0.4), blurRadius: 28),
+                      BoxShadow(
+                          color: step.color.withOpacity(0.4),
+                          blurRadius: 28),
                     ],
                   ),
                   child: Icon(step.icon, color: step.color, size: 38),
@@ -165,10 +160,13 @@ class _TutorialDialogState extends State<_TutorialDialog>
 
                 NeonButton(
                   label: isLast ? 'GOT IT — LET\'S GO!' : 'NEXT',
-                  icon: isLast ? Icons.play_arrow_rounded : Icons.arrow_forward_rounded,
+                  icon: isLast
+                      ? Icons.play_arrow_rounded
+                      : Icons.arrow_forward_rounded,
                   color: step.color,
                   fontSize: 14,
-                  padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 36, vertical: 16),
                   onTap: _next,
                 ),
 
@@ -178,7 +176,8 @@ class _TutorialDialogState extends State<_TutorialDialog>
                     onTap: () => Navigator.of(context).pop(),
                     child: Text(
                       'SKIP',
-                      style: CD.label(11, Colors.white.withOpacity(0.3), ls: 2),
+                      style: CD.label(
+                          11, Colors.white.withOpacity(0.3), ls: 2),
                     ),
                   ),
                 ],
@@ -196,5 +195,10 @@ class _Step {
   final Color color;
   final String title;
   final String body;
-  const _Step({required this.icon, required this.color, required this.title, required this.body});
+  const _Step({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+  });
 }
